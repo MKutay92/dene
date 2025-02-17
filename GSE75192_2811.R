@@ -99,18 +99,18 @@ dataplot <- data.frame(hds, sample_group)
 library(ggplot2)
 
 ggplot(dataplot, aes(x = sample_group2, y = hds, color = sample_group)) +
-  geom_point(size = 3) +  # Nokta boyutu
-  labs(title = "HDS Scoring for All Samples", x = "Samples", y = "Scores") +  # Grafik ba??l??klar??
-  theme_minimal() +  # Temiz bir tema
+  geom_point(size = 3) + 
+  labs(title = "HDS Scoring for All Samples", x = "Samples", y = "Scores") +
+  theme_minimal() +  
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 
 
 ggplot(dataplot, aes(x = sample_group, y = hds, fill = sample_group)) +
-  geom_violin(trim = FALSE, na.rm = TRUE) +  # Violin grafi??i
-  geom_jitter(width = 0.2, size = 2, alpha = 0.7) +  # Noktalar?? violin grafi??i ??zerine da????t
-  labs(title = "HDS Scoring for Young and Old Groups", x = "Groups", y = "Scores") +  # Ba??l??k ve eksen etiketleri
-  theme_minimal() +  # Temiz tema
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))  # X ekseni yaz??lar??n??n d??zenlenmesi
+  geom_violin(trim = FALSE, na.rm = TRUE) +  
+  geom_jitter(width = 0.2, size = 2, alpha = 0.7) + 
+  labs(title = "HDS Scoring for Young and Old Groups", x = "Groups", y = "Scores") + 
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) 
 
 ################################################################################
 ################################################################################
@@ -120,20 +120,20 @@ ggplot(dataplot, aes(x = sample_group, y = hds, fill = sample_group)) +
 
 library(DESeq2)
 
-# DESeq2 dataset olu??turma
+# DESeq2 dataset 
 dds <- DESeqDataSetFromMatrix(countData = data_gse75192,
                               colData = data.frame(condition = factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))),
                               design = ~ condition)
 
-# Veriyi normalize et
+# normalize data
 vsd <- vst(dds, blind = TRUE)
 
-# PCA analizi
+# PCA analyse
 pcaData <- plotPCA(vsd, intgroup = "condition", returnData = TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
 library(ggplot2)
-# PCA grafi??ini ??iz
+# PCA graph
 ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 3) +
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
@@ -147,7 +147,7 @@ dds <- DESeqDataSetFromMatrix(countData = data_gse75192_oy,
                               colData = data.frame(condition = factor(c( rep("9months",5), rep("30months",5)))),
                               design = ~ condition)
 
-# Veriyi normalize et
+# normalize
 vsd <- vst(dds, blind = TRUE)
 
 # PCA analizi
