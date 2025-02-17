@@ -280,47 +280,113 @@ write.csv(res_limma, "limma_results.csv")
 write.csv(go_results_deseq, "GO_results_DESeq2.csv")
 write.csv(go_results_limma, "GO_results_limma.csv")
 
+####################################################
 
+################################################################################
+
+# edgeR library
+library(edgeR)
+
+# data preperation
+# 
+group <- factor(c( rep("Young",5), rep("Old",5)))
+y <- DGEList(counts = data_gse75192_oy, group = group)
+
+# Filter genes
+keep <- filterByExpr(y)
+y <- y[keep, , keep.lib.sizes = FALSE]
+
+# Normalize data
+y <- calcNormFactors(y)
+
+# PCA 
+logCPM <- cpm(y, log = TRUE)
+
+# PCA
+pca <- prcomp(t(logCPM))
+percentVar <- round(100 * pca$sdev^2 / sum(pca$sdev^2), 1)
+pcaData <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2], condition = group)
+
+# PCA graph
+library(ggplot2)
+ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
+  geom_point(size = 3) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  theme_bw()
+
+# produce matrix
+design <- model.matrix(~ 0 + group)
+colnames(design) <- levels(group)
+
+# prediction disperition
+y <- estimateDisp(y, design)
+
+#fit to model
+fit <- glmFit(y, design)
+
+# produce contrast matrix
+contrast <- makeContrasts(Old - Young, levels = design)
+fit2 <- glmLRT(fit, contrast = contrast)
+
+# Results
+res_edgeR <- topTags(fit2, n = Inf)$table
+res_edgeR$gene_id <- rownames(res_edgeR)
+
+# order
+res_edgeR <- res_edgeR[order(res_edgeR$FDR), ]
+
+# Significant genes 
+sig_genes_edgeR <- res_edgeR$gene_id[which(res_edgeR$FDR < 0.05)]
+sig_genes_edgeR <- na.omit(sig_genes_edgeR)
+
+# save result
+write.csv(res_edgeR, file = "edgeR_results.csv", row.names = FALSE)
+write.csv(sig_genes_edgeR, file = "edgeR_significant_genes.csv", row.names = FALSE)
+
+
+
+
+
+#####################################################
 
 
 library(VennDiagram)
-if (!require("writexl")) install.packages("writexl")
-library(writexl)
+
 
 gen_list1 <- sig_genes_deseq
 gen_list2 <- sig_genes_limma
+gene_list3 <- sig_genes_edgeR
 # find common genes
 common_genes <- intersect(gen_list1, gen_list2)
-
-
 print(paste("Ortak Genler:", toString(common_genes)))
 
-# 3. Venn diagramm
 venn.plot <- venn.diagram(
-  x = list("deseq2" = gen_list1, "limma" = gen_list2),
+  x = list("deseq2" = gen_list1, "limma" = gen_list2, "edgeR" = gene_list3),
   filename = NULL,
   output = TRUE,
-  fill = c("purple", "green"),
+  fill = c("lightblue", "lightgreen", "pink"),
   alpha = 0.5,
   cex = 2,
   cat.cex = 2,
-  cat.pos = 0,
+  cat.pos = 1,
   cat.dist = 0,1,
-  main = "Comparison of Limma and deseq2 results"
+  main = "Comparison of Limma, Deseq2, and edgeR results"
 )
 
-# plotting
+# Venn 
 grid.newpage()
 
 grid.draw(venn.plot)
 
 
-#combine results
+#
 max_length <- max(length(gen_list1), length(gen_list2), length(common_genes))
 gen_list1 <- c(gen_list1, rep(NA, max_length - length(gen_list1)))
 gen_list2 <- c(gen_list2, rep(NA, max_length - length(gen_list2)))
 common_genes <- c(common_genes, rep(NA, max_length - length(common_genes)))
 
 output <- data.frame(Gen_List1 = gen_list1, Gen_List2 = gen_list2, Common_Genes = common_genes)
+
 
 writexl::write_xlsx(output, "GSE75192_siggenes.xlsx")
