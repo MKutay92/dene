@@ -150,30 +150,83 @@ dds <- DESeqDataSetFromMatrix(countData = data_gse75192_oy,
 # normalize
 vsd <- vst(dds, blind = TRUE)
 
-# PCA analizi
+# PCA 
 pcaData <- plotPCA(vsd, intgroup = "condition", returnData = TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
 library(ggplot2)
-# PCA grafi??ini ??iz
+# PCA graph
 ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 3) +
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
   theme_bw()
 
-# DESeq2 analizi
+# DESeq2 
 dds <- DESeq(dds)
 res_deseq <- results(dds)
 res_deseq <- as.data.frame(res_deseq[order(res_deseq$padj), ])
 
-# Gen isimlerini ekleme (DESeq2 sonu??lar??na)
+
 res_deseq$gene_id <- rownames(res_deseq)
 res_deseq <- merge(res_deseq, data_cleaned, by.x = "gene_id", by.y = "external_gene_id", all.x = TRUE)
 
-# DESeq2 sonu??lar??n?? s??ralama
+# DESeq2 results order
 res_deseq <- res_deseq[order(res_deseq$padj), ]
+######################################################################################
+######################################################################################
 
+data <- read_excel("GSE75192_counts_liver.xls")
+
+data<- data[,-1]
+
+groups <- factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))
+
+# Step 1: Remove duplicate genes, keeping the first occurrence
+data_unique <- data %>%
+  group_by(external_gene_id) %>%
+  slice_max(rowSums(across(where(is.numeric))), n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+# Step 2: Remove genes starting with "Gm" followed by numbers (predicted genes)
+data_filtered <- data_unique %>%
+  filter(!grepl("^Gm[0-9]+$", external_gene_id))
+
+
+# Save the cleaned data
+data_gse75192 <- data_filtered
+
+# Delete the first column, gene_id
+data_gse75192 <- data_gse75192[, -1]
+
+# Assign the second column, gene_symbol, as rownames and remove it from the column
+
+rownames(data_gse75192) <- data_filtered$external_gene_id
+
+sample_group <- factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))
+
+
+
+library(DESeq2)
+
+# DESeq2 for all time points
+dds <- DESeqDataSetFromMatrix(countData = data_gse75192,
+                              colData = data.frame(condition = factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))),
+                              design = ~ condition)
+
+
+# Likelihood Ratio Test (LRT) usage for testing all time points
+dds <- DESeq(dds, test="LRT", reduced= ~ 1)
+
+# results steps
+res_deseq <- results(dds)
+
+res_deseq <- as.data.frame(res_deseq[order(res_deseq$padj), ])
+
+res_deseq$gene_id <- rownames(res_deseq)
+
+########################################################################################################################
+########################################################################################################################
 # DGEA - limma
 library(limma)
 design <- model.matrix(~ 0 + factor(c( rep("Young",5), rep("Old",5))))
@@ -185,23 +238,23 @@ fit2 <- contrasts.fit(fit, contrast)
 fit2 <- eBayes(fit2)
 res_limma <- topTable(fit2, adjust = "fdr", number = Inf)
 
-# Gen isimlerini ekleme (limma sonu??lar??na)
+
 res_limma$gene_id <- rownames(res_limma)
 res_limma <- merge(res_limma, data_cleaned, by.x = "gene_id", by.y = "external_gene_id", all.x = TRUE)
 
-# limma sonu??lar??n?? s??ralama
+# limma results order
 res_limma <- res_limma[order(res_limma$adj.P.Val), ]
 
 
-# Significant gen listeleri ve GO analizi i??in adj.pvalue < 0.05 olan genler
+# Significant genes and GO
 sig_genes_deseq <- res_deseq$gene_id[which(res_deseq$padj < 0.05)]
 sig_genes_limma <- res_limma$gene_id[which(res_limma$adj.P.Val < 0.05)]
 
-# NA adj pvalue de??eri olan genlerin eliminasyonu
+# NA adj pvalue elimination
 sig_genes_deseq <- na.omit(sig_genes_deseq)
 sig_genes_limma <- na.omit(sig_genes_limma)
 
-# GO analizi - DESeq2
+# GO - DESeq2
 ego_deseq <- enrichGO(gene = sig_genes_deseq,
                       OrgDb = org.Mm.eg.db,
                       keyType = "SYMBOL",
@@ -211,7 +264,7 @@ ego_deseq <- enrichGO(gene = sig_genes_deseq,
                       readable = TRUE)
 go_results_deseq <- as.data.frame(ego_deseq)
 
-# GO analizi - limma
+# GO - limma
 ego_limma <- enrichGO(gene = sig_genes_limma,
                       OrgDb = org.Mm.eg.db,
                       keyType = "SYMBOL",
@@ -221,7 +274,7 @@ ego_limma <- enrichGO(gene = sig_genes_limma,
                       readable = TRUE)
 go_results_limma <- as.data.frame(ego_limma)
 
-# Sonu??lar?? dosyaya yazd??rma
+#writing results
 write_xlsx(res_deseq, "DESeq2_results.xlsx")
 write.csv(res_limma, "limma_results.csv")
 write.csv(go_results_deseq, "GO_results_DESeq2.csv")
@@ -236,13 +289,13 @@ library(writexl)
 
 gen_list1 <- sig_genes_deseq
 gen_list2 <- sig_genes_limma
-# 2. Ortak genleri bulun
+# find common genes
 common_genes <- intersect(gen_list1, gen_list2)
 
 
 print(paste("Ortak Genler:", toString(common_genes)))
 
-# 3. Venn diyagram?? olu??turun
+# 3. Venn diagramm
 venn.plot <- venn.diagram(
   x = list("deseq2" = gen_list1, "limma" = gen_list2),
   filename = NULL,
@@ -256,13 +309,13 @@ venn.plot <- venn.diagram(
   main = "Comparison of Limma and deseq2 results"
 )
 
-# Venn diyagram??n?? ??izdirin
+# plotting
 grid.newpage()
 
 grid.draw(venn.plot)
 
 
-# S??tunlar?? birle??tirme
+#combine results
 max_length <- max(length(gen_list1), length(gen_list2), length(common_genes))
 gen_list1 <- c(gen_list1, rep(NA, max_length - length(gen_list1)))
 gen_list2 <- c(gen_list2, rep(NA, max_length - length(gen_list2)))
@@ -270,6 +323,4 @@ common_genes <- c(common_genes, rep(NA, max_length - length(common_genes)))
 
 output <- data.frame(Gen_List1 = gen_list1, Gen_List2 = gen_list2, Common_Genes = common_genes)
 
-
-# Excel dosyas??na yazd??rma
 writexl::write_xlsx(output, "GSE75192_siggenes.xlsx")
