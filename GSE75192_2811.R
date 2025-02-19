@@ -13,6 +13,10 @@ library(clusterProfiler)
 library(ggplot2)
 library(data.table)
 library(AUCell)
+library(writexl)
+library(edgeR)
+
+
 
 data <- read_excel("GSE75192_counts_liver.xls")
 
@@ -38,8 +42,6 @@ data_cleaned <- data_filtered %>%
 # Save the cleaned data
 data_gse75192 <- data_cleaned
 
-library(writexl)
-
 write_xlsx(data_cleaned, "data_gse75192.xlsx")
 
 ################################################################################
@@ -55,9 +57,10 @@ data_gse75192 <- data_gse75192[, -1]
 
 rownames(data_gse75192) <- data_cleaned$external_gene_id
 
-################################################################################
+#######################################################################################
+#######################################################################################
 # Step 1: Load libraries
-library(AUCell)  # Assuming AUCell is required for the calculation, install if not already
+  # Assuming AUCell is required for the calculation, install if not already
 
 # Step 2: Load the necessary data
 hd_genes <- read.csv("HDAG.csv", stringsAsFactors = FALSE)  # Load the HDAG gene list
@@ -71,10 +74,6 @@ HDAG <- hd_genes
 # Assuming the function is like `calc_damage_score()`, you need to adapt based on the function's exact signature
 
 # Here is a pseudo-function usage, replace with the actual function details
-library(data.table)
-
-library(AUCell)
-
 HDS.scores <- DS_calc.func(exprMatrices = data_gse75192,
                            DSignature = HDAG,
                            ntop = 42, 
@@ -92,8 +91,6 @@ scores <- as.data.frame(HDS.scores)
 sample_group2 <- rownames(scores)
 hds<- scores$HDS.scores
 sample_group <- factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))
-
-
 
 dataplot <- data.frame(hds, sample_group)
 library(ggplot2)
@@ -115,10 +112,6 @@ ggplot(dataplot, aes(x = sample_group, y = hds, fill = sample_group)) +
 ################################################################################
 ################################################################################
 
-################################################################################
-#################################################################################
-
-library(DESeq2)
 
 # DESeq2 dataset 
 dds <- DESeqDataSetFromMatrix(countData = data_gse75192,
@@ -132,7 +125,7 @@ vsd <- vst(dds, blind = TRUE)
 pcaData <- plotPCA(vsd, intgroup = "condition", returnData = TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
-library(ggplot2)
+
 # PCA graph
 ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 3) +
@@ -140,7 +133,7 @@ ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
   theme_bw()
 ################################################################################
-data_gse75192_oy<-cbind.data.frame(data_gse75192[,5:9], data_gse75192[,20:24])
+data_gse75192_oy<-cbind.data.frame(data_gse75192[,5:9], data_gse75192[,20:24]) # it means old vs young
 rownames(data_gse75192_oy)<- rownames(data_gse75192)
 
 dds <- DESeqDataSetFromMatrix(countData = data_gse75192_oy,
@@ -154,7 +147,7 @@ vsd <- vst(dds, blind = TRUE)
 pcaData <- plotPCA(vsd, intgroup = "condition", returnData = TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
-library(ggplot2)
+
 # PCA graph
 ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 3) +
@@ -162,7 +155,7 @@ ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
   theme_bw()
 
-# DESeq2 
+# DESeq2  for old vs young
 dds <- DESeq(dds)
 res_deseq <- results(dds)
 res_deseq <- as.data.frame(res_deseq[order(res_deseq$padj), ])
@@ -173,62 +166,9 @@ res_deseq <- merge(res_deseq, data_cleaned, by.x = "gene_id", by.y = "external_g
 
 # DESeq2 results order
 res_deseq <- res_deseq[order(res_deseq$padj), ]
-######################################################################################
-######################################################################################
-
-data <- read_excel("GSE75192_counts_liver.xls")
-
-data<- data[,-1]
-
-groups <- factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))
-
-# Step 1: Remove duplicate genes, keeping the first occurrence
-data_unique <- data %>%
-  group_by(external_gene_id) %>%
-  slice_max(rowSums(across(where(is.numeric))), n = 1, with_ties = FALSE) %>%
-  ungroup()
-
-# Step 2: Remove genes starting with "Gm" followed by numbers (predicted genes)
-data_filtered <- data_unique %>%
-  filter(!grepl("^Gm[0-9]+$", external_gene_id))
-
-
-# Save the cleaned data
-data_gse75192 <- data_filtered
-
-# Delete the first column, gene_id
-data_gse75192 <- data_gse75192[, -1]
-
-# Assign the second column, gene_symbol, as rownames and remove it from the column
-
-rownames(data_gse75192) <- data_filtered$external_gene_id
-
-sample_group <- factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))
-
-
-
-library(DESeq2)
-
-# DESeq2 for all time points
-dds <- DESeqDataSetFromMatrix(countData = data_gse75192,
-                              colData = data.frame(condition = factor(c(rep("2months",4), rep("9months",5), rep("15months",5), rep("24months",5), rep("30months",5)))),
-                              design = ~ condition)
-
-
-# Likelihood Ratio Test (LRT) usage for testing all time points
-dds <- DESeq(dds, test="LRT", reduced= ~ 1)
-
-# results steps
-res_deseq <- results(dds)
-
-res_deseq <- as.data.frame(res_deseq[order(res_deseq$padj), ])
-
-res_deseq$gene_id <- rownames(res_deseq)
 
 ########################################################################################################################
-########################################################################################################################
-# DGEA - limma
-library(limma)
+# DGEA - limma for old vs young
 design <- model.matrix(~ 0 + factor(c( rep("Young",5), rep("Old",5))))
 colnames(design) <- c("Young", "Old")
 v <- voom(data_gse75192_oy, design, plot = TRUE)
@@ -245,48 +185,7 @@ res_limma <- merge(res_limma, data_cleaned, by.x = "gene_id", by.y = "external_g
 # limma results order
 res_limma <- res_limma[order(res_limma$adj.P.Val), ]
 
-
-# Significant genes and GO
-sig_genes_deseq <- res_deseq$gene_id[which(res_deseq$padj < 0.05)]
-sig_genes_limma <- res_limma$gene_id[which(res_limma$adj.P.Val < 0.05)]
-
-# NA adj pvalue elimination
-sig_genes_deseq <- na.omit(sig_genes_deseq)
-sig_genes_limma <- na.omit(sig_genes_limma)
-
-# GO - DESeq2
-ego_deseq <- enrichGO(gene = sig_genes_deseq,
-                      OrgDb = org.Mm.eg.db,
-                      keyType = "SYMBOL",
-                      ont = "BP",
-                      pAdjustMethod = "BH",
-                      qvalueCutoff = 0.05,
-                      readable = TRUE)
-go_results_deseq <- as.data.frame(ego_deseq)
-
-# GO - limma
-ego_limma <- enrichGO(gene = sig_genes_limma,
-                      OrgDb = org.Mm.eg.db,
-                      keyType = "SYMBOL",
-                      ont = "BP",
-                      pAdjustMethod = "BH",
-                      qvalueCutoff = 0.05,
-                      readable = TRUE)
-go_results_limma <- as.data.frame(ego_limma)
-
-#writing results
-write_xlsx(res_deseq, "DESeq2_results.xlsx")
-write.csv(res_limma, "limma_results.csv")
-write.csv(go_results_deseq, "GO_results_DESeq2.csv")
-write.csv(go_results_limma, "GO_results_limma.csv")
-
-####################################################
-
 ################################################################################
-
-# edgeR library
-library(edgeR)
-
 # data preperation
 # 
 group <- factor(c( rep("Young",5), rep("Old",5)))
@@ -298,22 +197,6 @@ y <- y[keep, , keep.lib.sizes = FALSE]
 
 # Normalize data
 y <- calcNormFactors(y)
-
-# PCA 
-logCPM <- cpm(y, log = TRUE)
-
-# PCA
-pca <- prcomp(t(logCPM))
-percentVar <- round(100 * pca$sdev^2 / sum(pca$sdev^2), 1)
-pcaData <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2], condition = group)
-
-# PCA graph
-library(ggplot2)
-ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
-  geom_point(size = 3) +
-  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
-  theme_bw()
 
 # produce matrix
 design <- model.matrix(~ 0 + group)
@@ -336,20 +219,28 @@ res_edgeR$gene_id <- rownames(res_edgeR)
 # order
 res_edgeR <- res_edgeR[order(res_edgeR$FDR), ]
 
-# Significant genes 
+###########################################################################################
+###########################################################################################
+
+# Significant genes for 3 algorithms for 9m vs 30m comparison
+sig_genes_deseq <- res_deseq$gene_id[which(res_deseq$padj < 0.05)]
+sig_genes_limma <- res_limma$gene_id[which(res_limma$adj.P.Val < 0.05)]
 sig_genes_edgeR <- res_edgeR$gene_id[which(res_edgeR$FDR < 0.05)]
+# NA adj pvalue elimination
+sig_genes_deseq <- na.omit(sig_genes_deseq)
+sig_genes_limma <- na.omit(sig_genes_limma)
 sig_genes_edgeR <- na.omit(sig_genes_edgeR)
 
 # save result
 write.csv(res_edgeR, file = "edgeR_results.csv", row.names = FALSE)
 write.csv(sig_genes_edgeR, file = "edgeR_significant_genes.csv", row.names = FALSE)
+write.csv(res_deseq, "DESeq2_results.csv", row.names = FALSE)
+write.csv(res_limma, "limma_results.csv", row.names = FALSE)
 
+####################################################################################################
+####################################################################################################
 
-
-
-
-#####################################################
-
+# Comparison of significantly changed genes for 3 algorithms
 
 library(VennDiagram)
 
@@ -359,7 +250,6 @@ gen_list2 <- sig_genes_limma
 gene_list3 <- sig_genes_edgeR
 # find common genes
 common_genes <- intersect(gen_list1, gen_list2)
-print(paste("Ortak Genler:", toString(common_genes)))
 
 venn.plot <- venn.diagram(
   x = list("deseq2" = gen_list1, "limma" = gen_list2, "edgeR" = gene_list3),
@@ -379,8 +269,9 @@ grid.newpage()
 
 grid.draw(venn.plot)
 
+# Saving this gene lists for ranking section
+# It is related with another study
 
-#
 max_length <- max(length(gen_list1), length(gen_list2), length(common_genes))
 gen_list1 <- c(gen_list1, rep(NA, max_length - length(gen_list1)))
 gen_list2 <- c(gen_list2, rep(NA, max_length - length(gen_list2)))
@@ -388,5 +279,32 @@ common_genes <- c(common_genes, rep(NA, max_length - length(common_genes)))
 
 output <- data.frame(Gen_List1 = gen_list1, Gen_List2 = gen_list2, Common_Genes = common_genes)
 
-
 writexl::write_xlsx(output, "GSE75192_siggenes.xlsx")
+
+#######################################################################################
+#######################################################################################
+
+#GO Analysis for only deseq2 and limma
+# GO - DESeq2
+ego_deseq <- enrichGO(gene = sig_genes_deseq,
+                      OrgDb = org.Mm.eg.db,
+                      keyType = "SYMBOL",
+                      ont = "BP",
+                      pAdjustMethod = "BH",
+                      qvalueCutoff = 0.05,
+                      readable = TRUE)
+go_results_deseq <- as.data.frame(ego_deseq)
+
+# GO - limma
+ego_limma <- enrichGO(gene = sig_genes_limma,
+                      OrgDb = org.Mm.eg.db,
+                      keyType = "SYMBOL",
+                      ont = "BP",
+                      pAdjustMethod = "BH",
+                      qvalueCutoff = 0.05,
+                      readable = TRUE)
+go_results_limma <- as.data.frame(ego_limma)
+
+#writing results
+write.csv(go_results_deseq, "GO_results_DESeq2.csv")
+write.csv(go_results_limma, "GO_results_limma.csv")
